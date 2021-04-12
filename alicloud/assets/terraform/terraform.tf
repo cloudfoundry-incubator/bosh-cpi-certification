@@ -11,111 +11,112 @@ terraform {
 provider "alicloud" {
   access_key = "${var.access_key}"
   secret_key = "${var.secret_key}"
-  region = "${var.region}"
+  region     = "${var.region}"
 }
 
 data "alicloud_zones" "default" {}
 
 # Create a VPC to launch our instances into
 resource "alicloud_vpc" "default" {
-  name = "${var.env_name}"
+  name       = "${var.env_name}"
   cidr_block = "172.16.0.0/16"
 }
 
 # Create an nat gateway to give our subnet access to the outside world
 resource "alicloud_nat_gateway" "default" {
   vpc_id = "${alicloud_vpc.default.id}"
-  name = "${var.env_name}"
+  name   = "${var.env_name}"
 }
 
 resource "alicloud_snat_entry" "default" {
-  snat_table_id = "${alicloud_nat_gateway.default.snat_table_ids}"
+  snat_table_id     = "${alicloud_nat_gateway.default.snat_table_ids}"
   source_vswitch_id = "${alicloud_vswitch.default.id}"
-  snat_ip = "${alicloud_eip.natgw.ip_address}"
+  snat_ip           = "${alicloud_eip.natgw.ip_address}"
 }
 
 resource "alicloud_vswitch" "default" {
-  vpc_id = "${alicloud_vpc.default.id}"
-  cidr_block = "${cidrsubnet(alicloud_vpc.default.cidr_block, 8, 0)}"
+  vpc_id            = "${alicloud_vpc.default.id}"
+  cidr_block        = "${cidrsubnet(alicloud_vpc.default.cidr_block, 8, 0)}"
   availability_zone = "${data.alicloud_zones.default.zones.0.id}"
 }
 
 resource "alicloud_snat_entry" "alicloud_resources" {
-  snat_table_id = "${alicloud_nat_gateway.default.snat_table_ids}"
+  snat_table_id     = "${alicloud_nat_gateway.default.snat_table_ids}"
   source_vswitch_id = "${alicloud_vswitch.alicloud_resources.id}"
-  snat_ip = "${alicloud_eip.natgw.ip_address}"
+  snat_ip           = "${alicloud_eip.natgw.ip_address}"
 }
 
 resource "alicloud_vswitch" "alicloud_resources" {
-  vpc_id = "${alicloud_vpc.default.id}"
-  cidr_block = "${cidrsubnet(alicloud_vpc.default.cidr_block, 8, 1)}"
+  vpc_id            = "${alicloud_vpc.default.id}"
+  cidr_block        = "${cidrsubnet(alicloud_vpc.default.cidr_block, 8, 1)}"
   availability_zone = "${data.alicloud_zones.default.zones.0.id}"
-  name = "${var.env_name}-alicloud-resources"
+  name              = "${var.env_name}-alicloud-resources"
 }
 
 resource "alicloud_security_group" "allow_all" {
-  vpc_id = "${alicloud_vpc.default.id}"
-  name = "allow_all-${var.env_name}"
+  vpc_id      = "${alicloud_vpc.default.id}"
+  name        = "allow_all-${var.env_name}"
   description = "Allow local and concourse traffic"
 }
 
 resource "alicloud_security_group_rule" "all-in" {
-  type = "ingress"
-  ip_protocol = "all"
-  nic_type = "intranet"
-  policy = "accept"
-  port_range = "-1/-1"
-  priority = 1
+  type              = "ingress"
+  ip_protocol       = "all"
+  nic_type          = "intranet"
+  policy            = "accept"
+  port_range        = "-1/-1"
+  priority          = 1
   security_group_id = "${alicloud_security_group.allow_all.id}"
-  cidr_ip = "0.0.0.0/0"
+  cidr_ip           = "0.0.0.0/0"
 }
 
 resource "alicloud_security_group_rule" "all-out" {
-  type = "egress"
-  ip_protocol = "all"
-  nic_type = "intranet"
-  policy = "accept"
-  port_range = "-1/-1"
-  priority = 1
+  type              = "egress"
+  ip_protocol       = "all"
+  nic_type          = "intranet"
+  policy            = "accept"
+  port_range        = "-1/-1"
+  priority          = 1
   security_group_id = "${alicloud_security_group.allow_all.id}"
-  cidr_ip = "0.0.0.0/0"
+  cidr_ip           = "0.0.0.0/0"
 }
 
 resource "alicloud_eip" "director" {
-  name = "${var.env_name}-director"
-  bandwidth = "10"
+  name                 = "${var.env_name}-director"
+  bandwidth            = "10"
   internet_charge_type = "PayByBandwidth"
 }
 
 resource "alicloud_eip" "bats" {
-  name = "${var.env_name}-bats"
-  bandwidth = "10"
+  name                 = "${var.env_name}-bats"
+  bandwidth            = "10"
   internet_charge_type = "PayByBandwidth"
 }
 
 resource "alicloud_eip" "natgw" {
-  name = "${var.env_name}-nat-gw"
-  bandwidth = "10"
+  name                 = "${var.env_name}-nat-gw"
+  bandwidth            = "10"
   internet_charge_type = "PayByBandwidth"
 }
 
 resource "alicloud_eip_association" "natgw" {
   allocation_id = "${alicloud_eip.natgw.id}"
-  instance_id = "${alicloud_nat_gateway.default.id}"
+  instance_id   = "${alicloud_nat_gateway.default.id}"
 }
 
 resource "alicloud_slb" "e2e" {
-  name = "${var.env_name}"
-  vswitch_id = "${alicloud_vswitch.alicloud_resources.id}"
+  name                 = "${var.env_name}"
+  vswitch_id           = "${alicloud_vswitch.alicloud_resources.id}"
   internet_charge_type = "paybytraffic"
+  specification        = "slb.s1.small"
 }
 resource "alicloud_slb_listener" "slb-80-80" {
-    frontend_port = 80
-    protocol = "http"
-    backend_port = 80
-    load_balancer_id = "${alicloud_slb.e2e.id}"
-    bandwidth = 10
-    health_check = "off"
+  frontend_port    = 80
+  protocol         = "http"
+  backend_port     = 80
+  load_balancer_id = "${alicloud_slb.e2e.id}"
+  bandwidth        = 10
+  health_check     = "off"
 
 }
 
